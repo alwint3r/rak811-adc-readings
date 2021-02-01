@@ -53,35 +53,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_ADC_Init(void);
 /* USER CODE BEGIN PFP */
-/**
-  * @brief  Conversion complete callback in non blocking mode
-  * @param  hadc ADC handle
-  * @retval None
-  */
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adc_handler)
-{
-	if (adc_handler == &hadc)
-	{
-		HAL_ADC_Stop_DMA(adc_handler);
-		// Refer to embedded internal reference voltage (table 15) from STM32L151 datasheet
-		uint16_t calibration_data = *((uint16_t*)VREFINT_CAL_ADDR_CMSIS);
 
-		// Refer to temperature sensor characteristics (table 58) from STM32L151 datasheet
-		uint16_t tscal1 = *((uint16_t*)TEMPSENSOR_CAL1_ADDR_CMSIS);
-		uint16_t tscal2 = *((uint16_t*)TEMPSENSOR_CAL2_ADDR_CMSIS);
-
-		// Refer to temperature sensor and internal reference voltage section (point 12.12)
-		// from the STM32L151 reference manual for the conversion
-		float vdda = 3.0 * calibration_data / adc_outputs[0];
-		float temperature = ((110.0 - 30.0)/(tscal2 - tscal1)) * (adc_outputs[1] - tscal1) + 30.0;
-		float vA1 = (vdda / 4095) * adc_outputs[2];
-
-		// To avoid compiler warnings
-		UNUSED(vA1);
-		UNUSED(vdda);
-		UNUSED(temperature);
-	}
-}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -120,7 +92,7 @@ int main(void)
   MX_DMA_Init();
   MX_ADC_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_ADC_Start_DMA(&hadc, adc_outputs, 3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -128,7 +100,7 @@ int main(void)
   while (1)
   {
 	  HAL_ADC_Start_DMA(&hadc, adc_outputs, 3);
-	  HAL_Delay(3000);
+	  HAL_Delay(500);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -219,7 +191,7 @@ static void MX_ADC_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_VREFINT;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_4CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_16CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -228,6 +200,7 @@ static void MX_ADC_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
   sConfig.Rank = ADC_REGULAR_RANK_2;
+  sConfig.SamplingTime = ADC_SAMPLETIME_192CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -236,6 +209,7 @@ static void MX_ADC_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_3;
+  sConfig.SamplingTime = ADC_SAMPLETIME_4CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -276,7 +250,33 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+/**
+  * @brief  Conversion complete callback in non blocking mode
+  * @param  hadc ADC handle
+  * @retval None
+  */
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* adc_handler)
+{
+	HAL_ADC_Stop_DMA(&hadc);
+	// Refer to embedded internal reference voltage (table 15) from STM32L151 datasheet
+	uint16_t calibration_data = *((uint16_t*)VREFINT_CAL_ADDR_CMSIS);
 
+	// Refer to temperature sensor characteristics (table 58) from STM32L151 datasheet
+	uint16_t tscal1 = *((uint16_t*)TEMPSENSOR_CAL1_ADDR_CMSIS);
+	uint16_t tscal2 = *((uint16_t*)TEMPSENSOR_CAL2_ADDR_CMSIS);
+
+	// Refer to temperature sensor and internal reference voltage section (point 12.12)
+	// from the STM32L151 reference manual for the conversion
+	float vdda = 3.0 * calibration_data / adc_outputs[0];
+	float temperature_adc = (vdda * adc_outputs[1]) / 3.0;
+	float temperature = (80.0 / (tscal2 - tscal1)) * (temperature_adc - tscal1) + 30.0;
+	float vA1 = (vdda / 4095) * adc_outputs[2];
+
+	// To avoid compiler warnings
+	UNUSED(vA1);
+	UNUSED(vdda);
+	UNUSED(temperature);
+}
 /* USER CODE END 4 */
 
 /**
